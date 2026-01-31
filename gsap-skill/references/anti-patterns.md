@@ -382,6 +382,68 @@ gsap.to(".heavy-animation", {
 **Why:** Too many elements with will-change consumes GPU memory and hurts performance.
 </will_change_abuse>
 
+<coin_flip_on_rotated_elements>
+**DON'T attempt coin flip (rotationY) on elements with existing Z rotation:**
+
+This is a deceptively complex scenario that's easy to get wrong. Combining rotationZ (for shape like diamond) with rotationY (for coin flip) creates compounding 3D transform issues:
+
+```javascript
+// BAD - multiple problems compound
+.diamond {
+  transform: rotateZ(45deg);  // Diamond shape
+}
+
+gsap.to(".diamond", { rotationY: 180 }); // Coin flip
+
+// Issues:
+// 1. Flip axis is diagonal, not horizontal (rotated with the Z)
+// 2. Children (tooltips, text) flip too and become inverted
+// 3. Perspective calculations get confusing
+// 4. Counter-rotations on children create more complexity
+```
+
+**Attempted fixes that DON'T work well:**
+```html
+<!-- Separating into wrapper/flipper layers -->
+<div class="wrapper">
+  <span class="tooltip">Text</span>
+  <div class="diamond-shape">
+    <span class="flipper">
+      <img />
+    </span>
+  </div>
+</div>
+```
+Even with proper structure, you'll likely encounter:
+- Image rotating unexpectedly
+- Perspective not applying correctly
+- Transform inheritance issues across nested 3D contexts
+
+**DO keep it simple - avoid this pattern entirely:**
+```javascript
+// GOOD - just use bobbing or scale for idle animation
+gsap.to(".logo", {
+  y: -8,
+  duration: 1.5,
+  ease: 'sine.inOut',
+  yoyo: true,
+  repeat: -1
+});
+
+// OR pulse/glow effect
+gsap.to(".logo", {
+  boxShadow: '0 0 20px rgba(255, 200, 0, 0.8)',
+  duration: 1,
+  yoyo: true,
+  repeat: -1
+});
+```
+
+**Why this is a bad pattern:** 3D transforms with nested elements and multiple rotation axes create exponential complexity. The mental model of how transforms compound becomes difficult to predict. Unless you have a very specific need AND time to debug extensively, avoid coin flips on rotated/shaped elements.
+
+**Bottom line:** If you want a coin flip effect, the element should have NO other rotations applied. If the element needs to be a diamond shape, use a different idle animation (bob, pulse, glow).
+</coin_flip_on_rotated_elements>
+
 <checklist>
 **Before shipping, verify:**
 - [ ] No CSS transitions on animated elements
@@ -393,4 +455,5 @@ gsap.to(".heavy-animation", {
 - [ ] No ScrollTriggers on nested tweens
 - [ ] will-change removed after animation
 - [ ] Conflicting animations handled
+- [ ] Tooltips/UI elements outside rotating containers
 </checklist>

@@ -25,8 +25,40 @@ curl -s "${COOLIFY_URL}/api/v1/applications" \
 **Get the UUID(s) of target application(s).**
 </step>
 
+<step name="check_deployment_source">
+**Step 2: Check for Auto-Deploy (CRITICAL - Prevents Double Deployments)**
+
+Before deploying via API, check if the app has automatic deployment configured:
+
+```bash
+# Check if app uses GitHub/GitLab App integration (auto-deploys on push)
+curl -s "${COOLIFY_URL}/api/v1/applications/{uuid}" \
+  -H "Authorization: Bearer ${COOLIFY_API_KEY}" | \
+  jq '{name, source_type, git_repository}'
+```
+
+**Auto-deploy sources (will deploy automatically on git push):**
+- `source_type` contains `GithubApp` → GitHub App integration (auto-deploys)
+- `source_type` contains `GitlabApp` → GitLab App integration (auto-deploys)
+- `manual_webhook_secret_*` is set → Manual webhook configured
+
+**Decision tree:**
+
+| Scenario | Action |
+|----------|--------|
+| Git push just made + auto-deploy source | **SKIP API deploy** - webhook handles it |
+| Git push just made + no auto-deploy | Use API deploy |
+| No git push (redeploy existing) | Use API deploy |
+| Force deploy requested | Use API deploy with `?force=true` |
+
+**If user just committed and pushed code, and the app has an auto-deploy source, inform them:**
+> "This app has automatic deployment via [GitHub/GitLab] App. The push you just made will trigger a deployment automatically. No API call needed."
+
+**Only proceed to Step 3 if API deployment is needed.**
+</step>
+
 <step name="pre_deploy_check">
-**Step 2: Pre-Deployment Checks**
+**Step 3: Pre-Deployment Checks**
 
 Before deploying, verify:
 
@@ -44,15 +76,17 @@ curl -s "${COOLIFY_URL}/api/v1/applications/{uuid}" \
 </step>
 
 <step name="deploy_single">
-**Step 3a: Deploy Single Application**
+**Step 4a: Deploy Single Application (API method)**
+
+**Only use this if Step 2 determined API deployment is needed.**
 
 ```bash
-# Standard deploy
-curl -X POST "${COOLIFY_URL}/api/v1/applications/{uuid}/deploy" \
+# Standard deploy (use the /deploy endpoint with uuid param)
+curl -s -X POST "${COOLIFY_URL}/api/v1/deploy?uuid={uuid}" \
   -H "Authorization: Bearer ${COOLIFY_API_KEY}"
 
 # Force deploy (ignore build cache)
-curl -X POST "${COOLIFY_URL}/api/v1/applications/{uuid}/deploy?force=true" \
+curl -s -X POST "${COOLIFY_URL}/api/v1/deploy?uuid={uuid}&force=true" \
   -H "Authorization: Bearer ${COOLIFY_API_KEY}"
 ```
 
@@ -60,7 +94,7 @@ curl -X POST "${COOLIFY_URL}/api/v1/applications/{uuid}/deploy?force=true" \
 </step>
 
 <step name="deploy_batch">
-**Step 3b: Batch Deploy Multiple Applications**
+**Step 4b: Batch Deploy Multiple Applications**
 
 For deploying multiple applications sequentially:
 
@@ -90,7 +124,7 @@ wait
 </step>
 
 <step name="deploy_project">
-**Step 3c: Deploy All Applications in Project**
+**Step 4c: Deploy All Applications in Project**
 
 ```bash
 # Get all applications in project
@@ -110,7 +144,7 @@ curl -s "${COOLIFY_URL}/api/v1/applications" \
 </step>
 
 <step name="monitor_deployment">
-**Step 4: Monitor Deployment Progress**
+**Step 5: Monitor Deployment Progress**
 
 ```bash
 # Check deployment status
@@ -131,7 +165,7 @@ watch -n 5 'curl -s "${COOLIFY_URL}/api/v1/applications/{uuid}" \
 </step>
 
 <step name="post_deploy_verify">
-**Step 5: Post-Deployment Verification**
+**Step 6: Post-Deployment Verification**
 
 ```bash
 # Verify application is running
@@ -178,8 +212,9 @@ curl -s -o /dev/null -w "%{http_code}" "https://${FQDN}"
 <success_criteria>
 Deployment is complete when:
 - [ ] Target application(s) identified
-- [ ] Pre-deployment checks passed
-- [ ] Deploy command executed successfully
+- [ ] Auto-deploy source checked (avoid double deployment)
+- [ ] Pre-deployment checks passed (if API deploy needed)
+- [ ] Deploy triggered (via webhook OR API, not both)
 - [ ] Deployment status shows "running"
 - [ ] Application responds at FQDN (if applicable)
 - [ ] User confirms expected behavior
