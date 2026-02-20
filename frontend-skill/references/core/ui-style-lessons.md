@@ -197,6 +197,66 @@ text-transform: uppercase;     /* Bold type = signature */
 </pattern>
 </successful_patterns>
 
+<case_study name="decorative-elements-responsive">
+**Context:** Web app with decorative character illustrations on the sides of a centered content box. Looked great on ultrawide, broke on MacBook Pro laptops.
+
+**FAILED: calc()-based center positioning + breakpoint micromanagement**
+```css
+/* Attempt 1: Position from center */
+.character-left { left: calc(50% - 980px); width: 420px; }
+/* Result: Characters overlap content on any screen < 1960px */
+
+/* Attempt 2: Add custom breakpoints for every screen size */
+.character { width: 160px; }  /* xl */
+@media (min-width: 1440px) { .character { width: 230px; } }
+@media (min-width: 1600px) { .character { width: 300px; } }
+@media (min-width: 1728px) { .character { width: 360px; } }
+/* Result: Characters too small, still didn't look right */
+
+/* Attempt 3: Shrink the content box to make room */
+.main { max-width: 768px; }
+/* Result: Box too narrow, wasted space in the middle */
+```
+
+**Why it failed (5 rounds of iteration):**
+- Kept trying to prevent ANY overlap between characters and box
+- Added more breakpoints to fix each screen size, broke another
+- Reduced min-heights but then added them back for "large screens"
+- Each fix created a new problem → endless cycle
+- Overthinking: treating a simple z-index problem as a layout problem
+
+**SUCCEEDED: Pin to edges + z-index + overflow-x hidden**
+```css
+body { overflow-x: hidden; }
+
+.character {
+  position: fixed;
+  bottom: 0;
+  z-index: 0;        /* Behind content */
+  width: 400px;      /* One size, big enough to look good */
+}
+.character-left { left: 0; }
+.character-right { right: 0; }
+
+.main-content {
+  position: relative;
+  z-index: 1;        /* Renders on top */
+}
+
+/* Also: removed all min-height from content area */
+```
+
+**Why it worked:**
+- Characters naturally tuck behind the content box (z-index)
+- On wide screens: fully visible on the sides
+- On medium screens: partially behind box, partially visible - looks intentional
+- On narrow screens: `overflow-x: hidden` clips them, or `max-lg:hidden` hides them
+- Content area height driven by padding, not min-height → buttons always visible
+- **3 lines of CSS instead of 8 breakpoints**
+
+**Key lesson:** When decorative elements clash with content, the fix is LAYERING (z-index), not SIZING (breakpoints). Simple beats clever.
+</case_study>
+
 <decision_framework>
 **When user requests a style, ask:**
 

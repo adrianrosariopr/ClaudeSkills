@@ -9,15 +9,16 @@
 
 <process>
 
-## Step 1: Use Configured Obsidian Vault
+## Step 1: Notion Configuration
 
-**Vault paths:**
-| Platform | Path |
-|----------|------|
-| Mac | `/Users/adrian-rosario/Library/CloudStorage/GoogleDrive-adrianrosariopr@gmail.com/My Drive/Obsidian` |
-| Windows | `TODO` |
+**Notion API settings (from SKILL.md):**
+| Setting | Value |
+|---------|-------|
+| API Token | Read from `NOTION_API_TOKEN` env var or `~/.claude/.notion-token` file |
+| API Version | `2022-06-28` |
+| Default Parent Page | SciPlay (`d841d8f6-efb9-412a-b025-8db02c06ccc8`) |
 
-Detect platform and use the appropriate path. No need to search.
+Ask the user which Notion parent page to use if not obvious. Use the Notion search API (`POST /v1/search`) to list accessible pages if needed.
 
 ## Step 2: Project Discovery
 
@@ -185,74 +186,66 @@ Based on confirmed type, read and fill the appropriate addendum:
 
 Fill addendum sections with type-specific findings from analysis.
 
-## Step 8: Add Obsidian Frontmatter
+## Step 8: Publish to Notion
 
-Prepend YAML frontmatter for Obsidian:
+Use the Notion API to create pages. Write a Python script (or use curl via Bash) that:
 
-```yaml
----
-title: "{Project Name} Specification"
-type: project-spec
-project: "{project-name}"
-project_type: "{website|webapp|mobile|game}"
-created: "{YYYY-MM-DD}"
-updated: "{YYYY-MM-DD}"
-status: draft
-tags:
-  - project-spec
-  - {project-type}
-  - {tech-stack-tags}
-aliases:
-  - "{Project Name} Spec"
-  - "{project-name}-spec"
----
+1. **Creates the main spec page** under the parent page using `POST https://api.notion.com/v1/pages`
+2. **Appends content blocks** using `PATCH https://api.notion.com/v1/blocks/{page_id}/children`
+
+**Notion block types to use:**
+- `heading_1`, `heading_2`, `heading_3` for headings
+- `paragraph` for body text (with `rich_text` annotations for bold/italic/code)
+- `bulleted_list_item` for bullet points
+- `table` with `table_row` children for tables
+- `divider` for section breaks
+- `code` for code blocks
+- `callout` for warnings/notes
+
+**Important API limits:**
+- Max 100 blocks per request — batch larger specs into multiple append calls
+- Rich text content max 2000 characters per block
+
+**Page properties:**
+```json
+{
+  "parent": {"page_id": "{parent_page_id}"},
+  "icon": {"type": "emoji", "emoji": "📊"},
+  "properties": {
+    "title": [{"text": {"content": "{Project Name} — Spec"}}]
+  },
+  "children": [... first 100 blocks ...]
+}
 ```
 
-## Step 9: Save to Obsidian Vault
+## Step 9: Publish ENV Child Page
 
-Create directory and save file:
+If a `.env` file exists in the project root:
 
-```bash
-# Create project folder in vault root
-mkdir -p "{vault_path}/{project-name}"
+1. Read the `.env` file
+2. Create a child page under the spec page:
 
-# Save spec
-# Use Write tool to save the complete spec
+```json
+{
+  "parent": {"page_id": "{spec_page_id}"},
+  "icon": {"type": "emoji", "emoji": "🔐"},
+  "properties": {
+    "title": [{"text": {"content": "ENV — Environment Variables"}}]
+  },
+  "children": [
+    heading_2("Environment Variables"),
+    paragraph("Copy everything below into your .env file."),
+    divider(),
+    code_block(env_contents, "plain text"),
+    divider(),
+    callout("This file contains secrets. Do not share publicly.", "⚠️", "yellow_background")
+  ]
+}
 ```
-
-Save path: `{vault_path}/{project-name}/PROJECT-SPEC.md`
-
-## Step 10: Copy Environment Variables
-
-If a `.env` file exists in the project root, create `ENV.md` in the vault:
-
-1. Read the project's `.env` file
-2. Create `ENV.md` with this structure:
-
-```markdown
----
-title: "{Project Name} - Environment Variables"
-type: env-config
-project: "{project-name}"
-updated: "{YYYY-MM-DD}"
----
-
-# Environment Variables
-
-Copy everything below the line into your `.env` file.
-
----
-
-\`\`\`env
-{contents of .env file}
-\`\`\`
-```
-
-Save path: `{vault_path}/{project-name}/ENV.md`
 
 If no `.env` file exists, skip this step.
 
-## Step 11: Process Feature Specs
+## Step 10: Process Feature Specs
 
 Check if the project has feature specs in `docs/features/`:
 
@@ -262,93 +255,44 @@ ls docs/features/FEATURE-*.md 2>/dev/null || echo "No feature specs found"
 
 If feature specs exist:
 
-**1. Add Features section to PROJECT-SPEC.md**
+**1. Add Features section to the main spec page**
 
-Add a section after the main content:
+Append a table block listing each feature with name, status, and description.
 
-```markdown
----
+**2. Create feature detail child pages**
 
-## Features
-
-| Feature | Status | Description |
-|---------|--------|-------------|
-| [[features/{feature-name}|{Feature Name}]] | {Draft/In Progress/Complete} | {One-line summary} |
-
-See individual feature pages for implementation details and task lists.
-```
-
-**2. Create feature detail pages**
-
-For each `FEATURE-*.md` found:
-
-```bash
-mkdir -p "{vault_path}/{project-name}/features"
-```
-
-Create `{vault_path}/{project-name}/features/{feature-name}.md` with:
-
-```markdown
----
-title: "{Feature Name}"
-type: feature-spec
-project: "{project-name}"
-parent: "[[PROJECT-SPEC]]"
-status: {from original spec}
-created: "{date from original}"
-updated: "{YYYY-MM-DD}"
-tags:
-  - feature-spec
-  - {project-name}
----
-
-{Full content from docs/features/FEATURE-*.md}
-
----
-
-*Imported from project: `docs/features/FEATURE-{name}.md`*
-```
-
-**3. Extract summary for main spec**
-
-From each feature spec, extract:
-- Feature name (from `# Feature: {Name}`)
-- Status (from frontmatter or bottom of file)
-- One-line description (from Overview section, first sentence)
+For each `FEATURE-*.md` found, create a child page under the spec page with the full feature content converted to Notion blocks.
 
 If no feature specs exist, skip this step.
 
-## Step 12: Report Completion
+## Step 11: Report Completion
 
 Tell the user:
-- Where the spec was saved
+- Notion URLs for the spec page and ENV page
 - Summary of what was documented
 - Number of feature specs imported (if any)
 - Any sections that need manual review
 
-**Output structure:**
+**Output structure (Notion page tree):**
 ```
-{vault}/{project-name}/
-├── PROJECT-SPEC.md      # Main spec with Features section
-├── ENV.md               # Environment variables (if .env exists)
-└── features/            # Feature detail pages (if docs/features/ exists)
-    ├── {feature-1}.md
-    └── {feature-2}.md
+{Parent Page}/
+└── {Project Name} — Spec          # Main spec page
+    ├── ENV — Environment Variables # Child page (if .env exists)
+    └── {Feature Name}             # Child pages (if docs/features/ exists)
 ```
 
 </process>
 
 <success_criteria>
 This workflow is complete when:
-- [ ] Obsidian vault located or path provided
+- [ ] Notion parent page identified
 - [ ] Project comprehensively analyzed (8 analysis areas)
 - [ ] Project type detected and confirmed by user
 - [ ] Core spec generated with all applicable sections
 - [ ] Type-specific addendum generated
 - [ ] Features section added (if docs/features/ exists)
-- [ ] Feature detail pages created in vault/features/
-- [ ] Obsidian frontmatter added
-- [ ] PROJECT-SPEC.md saved to vault
-- [ ] ENV.md saved to vault (if .env exists)
-- [ ] User notified of completion and location
+- [ ] Feature detail child pages created in Notion
+- [ ] Main spec page published to Notion
+- [ ] ENV child page published to Notion (if .env exists)
+- [ ] User notified of Notion page URLs
 </success_criteria>

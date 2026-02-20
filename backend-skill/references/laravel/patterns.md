@@ -468,6 +468,122 @@ class OrderTest extends TestCase
 ```
 </testing>
 
+<base_class_extraction>
+**When to Extract Shared Logic to a Base Class or Trait**
+
+When multiple classes share identical methods or patterns, extract to a base class BEFORE making changes.
+
+**Signs you need extraction:**
+- 3+ files with the same method body (just different config values)
+- A fix that needs to be applied to every file in a group
+- Copy-pasting a code block and only changing 1-2 values
+
+```php
+// BEFORE: 10 importer classes each have their own recountItems()
+// Each method body is identical except for $this->sourceType
+
+// CsvImporter.php — copy #1
+protected function recountItems(): void { /* 12 identical lines */ }
+
+// ApiImporter.php — copy #2
+protected function recountItems(): void { /* 12 identical lines */ }
+
+// ... 8 more copies
+
+// AFTER: Extract to base class, children inherit
+abstract class BaseImporter
+{
+    abstract public function getSourceType(): string;
+
+    protected function recountItems(int $categoryId): void
+    {
+        DB::statement('
+            UPDATE categories SET item_count = sub.cnt
+            FROM (SELECT category_id, COUNT(*) as cnt FROM items GROUP BY category_id) sub
+            WHERE categories.id = sub.category_id AND categories.type_id = ?
+        ', [$categoryId]);
+    }
+
+    protected function getApiKey(): string
+    {
+        return config('services.provider.key');
+    }
+
+    protected function buildStorageUrl(string $path): string
+    {
+        return config('app.storage_url') . $path;
+    }
+
+    protected function logSkipped(\Exception $e, string $recordId, array $data): void
+    {
+        \Log::warning('Import skipped', [
+            'source' => $this->getSourceType(),
+            'record_id' => $recordId,
+            'name' => $data['name'] ?? 'unknown',
+            'error' => $e->getMessage(),
+        ]);
+    }
+}
+
+// Each importer just overrides what's unique:
+class CsvImporter extends BaseImporter
+{
+    public function getSourceType(): string { return 'csv'; }
+    // Inherits recountItems(), getApiKey(), buildStorageUrl(), logSkipped()
+}
+```
+
+**When to use a trait vs base class:**
+- **Base class**: When files share identity (all are "importers") and behavior
+- **Trait**: When shared behavior spans unrelated classes (e.g., `HasApiKey` used by both importers and controllers)
+
+**The "Fix Once" principle:**
+When you need to change behavior across a group of similar files:
+1. First, extract the shared code to one place
+2. Then, make the change in that one place
+3. All files get the fix automatically
+
+This turns 10 file edits into 1 file edit.
+</base_class_extraction>
+
+<refactoring_workflow>
+**Workflow for Large Refactoring Tasks**
+
+When cleaning up a codebase with multiple types of issues, work in layers:
+
+```bash
+# Layer 1: Mechanical/automated changes (tools do the work)
+php artisan pint              # PHP formatting
+npm run format                # JS/TS formatting
+git add . && git commit -m "style: Apply code formatting"
+
+# Layer 2: Search-replace changes (same fix, many files)
+# Find all occurrences first, then replace
+grep -rn "env('SECRET_KEY')" app/ --include="*.php"
+# Replace, then commit
+git commit -m "refactor: Use config() instead of env() calls"
+
+# Layer 3: Structural changes (extract base classes, shared methods)
+# Create/update base class with shared logic
+git commit -m "refactor: Extract shared import logic to BaseImporter"
+
+# Layer 4: Dead code removal
+# Delete files, remove unused methods
+git commit -m "cleanup: Remove legacy controllers and models"
+
+# Layer 5: Feature/logic changes (require human judgment)
+# Fix actual bugs, add missing functionality, etc.
+git commit -m "fix: Handle edge cases in data processing"
+```
+
+**Why this order matters:**
+- Formatting first → clean diff for everything after
+- Search-replace second → reduces noise for structural changes
+- Structure third → base classes exist before logic changes reference them
+- Dead code fourth → simpler codebase for feature work
+- Features last → smallest, cleanest diff for the hardest-to-review changes
+</refactoring_workflow>
+
 <quick_reference>
 **Artisan Commands:**
 

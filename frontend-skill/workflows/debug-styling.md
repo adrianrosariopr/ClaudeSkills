@@ -222,6 +222,64 @@ will-change
 ```
 </step>
 
+<step name="decorative-element-overflow">
+**Decorative elements (characters, illustrations, background images) overlapping content:**
+
+This is almost always caused by over-engineered positioning. The fix is simple:
+
+1. **Pin to edges:** `left: 0` / `right: 0` (not `calc()` from center)
+2. **Layer with z-index:** decorative = `z-index: 0`, content = `z-index: 1`
+3. **Clip excess:** `overflow-x: hidden` on body
+4. **Hide when too small:** one breakpoint to hide on mobile/tablet
+
+```css
+/* The pattern that works everywhere */
+body { overflow-x: hidden; }
+
+.decorative {
+  position: fixed;
+  bottom: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+.decorative-left { left: 0; }
+.decorative-right { right: 0; }
+
+.main-content {
+  position: relative;
+  z-index: 1;
+}
+```
+
+**Common mistakes to avoid:**
+- Don't use `calc(50% - Xpx)` for decorative positioning
+- Don't add 5+ breakpoints to resize decorative elements
+- Don't use `min-height` to "make room" for decorative elements
+- Don't try to prevent ALL overlap - let z-index handle it naturally
+</step>
+
+<step name="content-below-fold">
+**Buttons/CTAs cut off below the viewport:**
+
+Almost always caused by `min-height` on content containers:
+
+```css
+/* This is the problem */
+.content-area { min-height: 520px; }
+.drop-zone { min-height: 380px; }
+/* Combined with header + nav + padding = taller than viewport */
+```
+
+**Fix:** Remove min-height, use padding instead:
+```css
+.content-area { padding: 1.5rem; }
+.drop-zone { padding: 4rem 1.5rem; }
+```
+
+**Verify:** Add up all vertical space (header + nav + padding + content + buttons + footer).
+If total > ~800px, it won't fit on most laptops without scrolling.
+</step>
+
 <step name="tailwind-specific">
 **Class not working:**
 ```bash

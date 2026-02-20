@@ -315,6 +315,143 @@ try {
 ```
 </ignoring_errors>
 
+<copy_paste_fixes>
+**Anti-Pattern: Copy-Pasting the Same Fix Across Multiple Files**
+
+```php
+// BAD - Same config fix manually applied to 10 similar service classes:
+// EmailImporter.php:  $this->apiKey = config('services.provider.key');
+// CsvImporter.php:    $this->apiKey = config('services.provider.key');
+// ApiImporter.php:    $this->apiKey = config('services.provider.key');
+// ... 7 more files with the identical change
+
+// BAD - Identical error handling block copy-pasted across importers:
+} catch (\Exception $e) {
+    \Log::warning('Record import skipped', [
+        'source' => 'email',    // Only this string changes per file
+        'record_id' => $id,
+        'error' => $e->getMessage(),
+    ]);
+    return 'skipped';
+}
+```
+
+**Why it's bad:**
+- Future changes require touching all files again
+- Easy to miss a file, creating inconsistency
+- Burns time on mechanical repetition
+- Identical code in N files means N chances to introduce a typo
+
+**Instead:**
+```php
+// GOOD - Extract to base class FIRST, then all children inherit
+abstract class BaseImporter
+{
+    abstract protected function getSourceName(): string;
+
+    protected function getApiKey(): string
+    {
+        return config('services.provider.key');
+    }
+
+    protected function logSkippedRecord(\Exception $e, string $id): void
+    {
+        \Log::warning('Record import skipped', [
+            'source' => $this->getSourceName(),
+            'record_id' => $id,
+            'error' => $e->getMessage(),
+        ]);
+    }
+}
+
+// Each child just overrides what's unique:
+class EmailImporter extends BaseImporter
+{
+    protected function getSourceName(): string { return 'email'; }
+    // Inherits getApiKey(), logSkippedRecord()
+}
+```
+
+**Rule:** When you see the same code in 3+ files, extract it to a shared location (base class, trait, or helper) BEFORE applying the fix. Fix once, apply everywhere.
+</copy_paste_fixes>
+
+<megacommit>
+**Anti-Pattern: Megacommits Mixing Multiple Concerns**
+
+```bash
+# BAD - One massive commit with 5+ different types of changes:
+git commit -m "Major cleanup: formatting + dead code + security + config changes"
+# Contains: Prettier reformatting + SSL removal + URL centralization +
+# dead code deletion + feature fixes + middleware additions
+```
+
+**Why it's bad:**
+- Impossible to review (hundreds of files, tens of thousands of lines)
+- Can't revert one change without reverting everything
+- Git blame becomes useless for every touched file
+- Hides bugs — real logic changes buried under formatting noise
+
+**Instead:**
+```bash
+# GOOD - Atomic commits, one concern each:
+
+# 1. Formatting (mechanical, tool-driven)
+php artisan pint && npm run format
+git add . && git commit -m "style: Apply code formatting"
+
+# 2. Configuration centralization (search-replace)
+git commit -m "refactor: Replace env() calls with config()"
+
+# 3. Security fix
+git commit -m "security: Enable SSL verification for HTTP calls"
+
+# 4. Dead code removal
+git commit -m "cleanup: Remove unused controllers and services"
+
+# 5. Feature/logic changes
+git commit -m "fix: Expand search to include all supported types"
+```
+
+**Rule:** Each commit should have ONE type of change. If you're writing "and" in the commit message, it should probably be multiple commits. Formatting, security, refactoring, features, and dead code removal are separate concerns.
+</megacommit>
+
+<mechanical_search_replace>
+**Anti-Pattern: Manual Editing for Mechanical Changes**
+
+```php
+// BAD - Manually opening 15+ files to make the same string replacement:
+// File 1: env('API_KEY') → config('services.api.key')
+// File 2: env('API_KEY') → config('services.api.key')
+// ... 13 more files
+
+// BAD - Manually removing the same option from every HTTP call:
+// File 1: Remove Http::withOptions(['verify' => false])->
+// File 2: Remove Http::withOptions(['verify' => false])->
+// ... 10 more files
+```
+
+**Why it's bad:**
+- Slow, error-prone, wastes time
+- Easy to miss occurrences
+- Each manual edit is a chance to introduce a typo or inconsistency
+
+**Instead:**
+```bash
+# GOOD - Use search-replace tools for mechanical changes
+
+# 1. Find all occurrences first
+grep -rn "env('API_KEY')" app/ --include="*.php"
+
+# 2. Replace with sed or IDE "Find and Replace in Files"
+sed -i '' "s|env('API_KEY')|config('services.api.key')|g" app/**/*.php
+
+# 3. Verify with git diff
+git diff --stat
+```
+
+**Rule:** If the same string appears in 3+ files and needs the same replacement, use search-replace tooling. Save manual editing for changes that require human judgment.
+</mechanical_search_replace>
+
 <summary>
 **Quick Reference:**
 
@@ -333,4 +470,7 @@ try {
 | No transactions | Wrap related writes |
 | Logging secrets | Redact sensitive data |
 | Ignoring errors | Handle failures |
+| Copy-paste fixes | Extract to base class/trait first |
+| Megacommits | One concern per commit |
+| Manual search-replace | Use tooling for mechanical changes |
 </summary>

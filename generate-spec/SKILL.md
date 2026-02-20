@@ -1,6 +1,6 @@
 ---
 name: generate-spec
-description: Analyzes codebases and generates specification documents. Auto-detects project type and produces a spec describing what exists. Saves to Obsidian vault with ENV.md. Use when documenting a project or onboarding to a codebase.
+description: Analyzes codebases and generates specification documents. Auto-detects project type and produces a spec describing what exists. Saves to Notion via API with ENV as a child page. Use when documenting a project or onboarding to a codebase.
 ---
 
 <essential_principles>
@@ -37,34 +37,40 @@ Write "The user clicks the button and sees a confirmation" NOT "The system shall
 Use tables to walk through user flows. Step 1, Step 2, Step 3. This is easy to scan and understand. Include what the user sees at each step.
 </principle>
 
-<principle name="obsidian-output">
-**Output to Obsidian vault**
+<principle name="notion-output">
+**Output to Notion**
 
-All specs save to the configured Obsidian vault with proper frontmatter for Dataview queries, tags, and wikilinks.
+All specs are published directly to Notion via the API. The main spec becomes a page under the user-specified parent page, and ENV.md becomes a child page of the spec page.
 
-Vault path: `/Users/adrian-rosario/Library/CloudStorage/GoogleDrive-adrianrosariopr@gmail.com/My Drive/Obsidian`
+Notion API Token: Read from `NOTION_API_TOKEN` env var or `~/.claude/.notion-token` file
+Default parent page (SciPlay): `d841d8f6-efb9-412a-b025-8db02c06ccc8`
+Workspace: Invisionnaire LLC
 </principle>
 
 </essential_principles>
 
 <configuration>
-**Obsidian Vault Paths**
+**Notion Configuration**
 
-| Platform | Path |
-|----------|------|
-| Mac | `/Users/adrian-rosario/Library/CloudStorage/GoogleDrive-adrianrosariopr@gmail.com/My Drive/Obsidian` |
-| Windows | `TODO` |
+| Setting | Value |
+|---------|-------|
+| API Token | Read from `NOTION_API_TOKEN` env var or `~/.claude/.notion-token` file |
+| Workspace | Invisionnaire LLC |
+| Default Parent Page | SciPlay (`d841d8f6-efb9-412a-b025-8db02c06ccc8`) |
+| API Version | `2022-06-28` |
 
-**Output Files:**
-- `{vault}/{project-name}/PROJECT-SPEC.md` - Project specification
-- `{vault}/{project-name}/ENV.md` - Environment variables (if .env exists)
-- `{vault}/{project-name}/features/*.md` - Feature detail pages (if docs/features/ exists)
+**Output Structure (Notion pages):**
+- `{parent-page} / {Project Name} — Spec` - Main spec page
+- `{spec-page} / ENV — Environment Variables` - Child page (if .env exists)
+- `{spec-page} / {Feature Name}` - Child pages for each feature (if docs/features/ exists)
+
+**How to publish to Notion:**
+Use the Notion API via Python/curl to create pages with block content. The API token is a workspace-level integration ("Clawdbot"). Pages the integration creates are automatically accessible. Use `POST /v1/pages` to create pages and `PATCH /v1/blocks/{id}/children` to append blocks (max 100 blocks per request).
 
 **Feature Specs:**
 If the project has `docs/features/FEATURE-*.md` files (created by `feature-spec` skill):
-1. Add a **Features** section to PROJECT-SPEC.md with summaries
-2. Create individual pages in `{vault}/{project-name}/features/` with full details
-3. Link summaries to detail pages using wikilinks
+1. Add a **Features** section to the main spec page with summaries
+2. Create individual child pages under the spec page for each feature
 </configuration>
 
 <intake>
@@ -74,12 +80,13 @@ The skill will:
 1. Analyze the current project comprehensively
 2. Auto-detect project type (website, webapp, mobile, game)
 3. Generate Core Spec + appropriate addendum
-4. Save to your Obsidian vault
+4. Publish to Notion under the specified parent page (default: SciPlay)
+5. Create ENV child page if .env exists
 
 **Confirm to proceed, or specify:**
 - Different project path
 - Override project type
-- Custom output location
+- Different Notion parent page
 </intake>
 
 <routing>
@@ -139,9 +146,8 @@ Spec generation is complete when:
 - [ ] Core Spec generated with all applicable sections
 - [ ] Type-specific addendum appended
 - [ ] Features section added (if docs/features/ exists)
-- [ ] Feature detail pages created in vault
-- [ ] Obsidian frontmatter added (tags, dates, links)
-- [ ] PROJECT-SPEC.md saved to Obsidian vault
-- [ ] ENV.md saved to vault (if .env exists in project)
-- [ ] User informed of output location
+- [ ] Feature detail child pages created in Notion
+- [ ] Main spec page published to Notion under parent page
+- [ ] ENV child page published to Notion (if .env exists in project)
+- [ ] User informed of Notion page URLs
 </success_criteria>

@@ -370,6 +370,57 @@ ANALYZE TABLE table_name;
 - External: PgBouncer (PostgreSQL), ProxySQL (MySQL)
 - Configure appropriate pool size
 </practice>
+
+<practice name="single-pool-creation">
+**Single Pool Creation Path**
+
+If your code has multiple functions that create connection pools (e.g., sync and async variants), they WILL drift. One gets a fix, the other doesn't.
+
+```typescript
+// BAD: Two pool creation paths that can diverge
+async function initPool() {  // Has SSL fix
+  pool = new Pool({ connectionString, ssl: { rejectUnauthorized: false } });
+}
+function getPool() {  // Missing SSL fix!
+  pool = new Pool({ connectionString });
+}
+```
+
+**Fix:** Have exactly ONE function that creates pools. If you need sync/async variants, have the sync one delegate to the async one, or extract pool creation into a shared helper.
+</practice>
+
+<practice name="ssl-connections">
+**SSL for Cloud Database Connections**
+
+Always configure SSL when connecting to cloud databases (AWS RDS, Cloud SQL, Azure DB).
+
+- Strip `sslmode` from connection strings — handle SSL through driver options only
+- Enable SSL for ALL non-localhost connections (simple, reliable)
+- Set `rejectUnauthorized: false` for managed databases with self-signed CA chains
+- Test SSL config in staging before deploying to production
+
+```typescript
+// Simple, reliable SSL detection
+const isLocal = url.includes('localhost') || url.includes('127.0.0.1');
+const sslConfig = isLocal ? undefined : { rejectUnauthorized: false };
+```
+</practice>
+
+<practice name="health-check-resilience">
+**Health Check Endpoint Resilience**
+
+If your health check endpoint queries the database, it MUST handle an uninitialized database. Otherwise: new container starts → health check fails → container killed → repeat forever.
+
+```typescript
+// In your health check / config endpoint:
+await initializeDatabase(); // CREATE TABLE IF NOT EXISTS (idempotent)
+// Then query normally
+```
+
+- Health check endpoints should initialize schema if missing
+- Use `CREATE TABLE IF NOT EXISTS` — it's safe to call every time
+- Return degraded status (200 with warning) rather than 500 when data is empty
+</practice>
 </operations>
 
 <external_data_integration>

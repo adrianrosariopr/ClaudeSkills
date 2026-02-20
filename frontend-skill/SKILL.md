@@ -48,6 +48,19 @@ When implementing a visual style (retro, minimal, cyberpunk, etc.):
 See `references/core/ui-style-lessons.md` for real pass/fail examples.
 </principle>
 
+<principle name="simplest-solution-first">
+When fixing layout or responsive issues, reach for the simplest CSS tool first:
+- z-index layering before breakpoint micromanagement
+- overflow: hidden before calc() repositioning
+- Padding before min-height for spacing
+- One breakpoint (show/hide) before five granular size steps
+- Pin to edges (left:0/right:0) before calc(50% - Xpx)
+- `min-w-0` on flex items before overflow hacks on children (sidebar layouts!)
+If your fix requires more than 2-3 custom breakpoints, you're solving the wrong problem.
+See `references/core/ui-style-lessons.md` for the decorative-elements case study.
+See `references/core/anti-patterns.md` `flex-item-overflow-sidebar-layout` for the sidebar overflow case study.
+</principle>
+
 </essential_principles>
 
 <intake>
@@ -107,13 +120,15 @@ After every change, verify:
 
 **Web (React, Vue, Laravel):**
 ```bash
-# 1. Does it build?
-npm run build  # or php artisan optimize
+# 1. Does it build? ONLY if project allows - check CLAUDE.md first.
+# Many projects prohibit running builds for verification.
+# If build is restricted, rely on dev server hot reload + browser check.
+npm run build  # or php artisan optimize - ONLY if explicitly allowed
 
 # 2. Do tests pass?
 npm test
 
-# 3. Check bundle size
+# 3. Check bundle size (only if build is allowed)
 npm run build -- --analyze  # if available
 
 # 4. Lighthouse audit

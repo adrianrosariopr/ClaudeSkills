@@ -305,6 +305,175 @@ const useStore = create((set) => ({
 </div>
 ```
 </anti_pattern>
+
+<anti_pattern name="min-height-for-aesthetics">
+**Problem:** Using min-height to make empty containers "look bigger"
+
+```css
+/* Bad: Forces the page taller than the viewport */
+.content-area {
+  min-height: 520px;
+}
+
+.drop-zone {
+  min-height: 380px;
+}
+
+/* On a laptop (900px viewport), this alone is 900px.
+   Add header, nav, padding = buttons pushed below the fold. */
+```
+
+**Why it's bad:**
+- Pushes interactive elements (buttons, CTAs) below the viewport
+- Users can't see or reach primary actions without scrolling
+- Different viewport heights (laptops, tablets) break unpredictably
+- Content should dictate height, not arbitrary pixel values
+
+**Instead:**
+```css
+/* Good: Padding provides visual breathing room without forcing height */
+.content-area {
+  padding: 1.5rem;
+}
+
+.drop-zone {
+  padding: 4rem 1.5rem;  /* Generous vertical padding */
+}
+
+/* If you truly need a minimum, use a small reasonable value */
+.drop-zone {
+  min-height: 200px;  /* Just enough to be recognizable as a drop target */
+}
+```
+</anti_pattern>
+
+<anti_pattern name="calc-positioning-decorative">
+**Problem:** Using calc() to position decorative elements relative to center
+
+```css
+/* Bad: Assumes viewport is ~1960px wide */
+.character-left {
+  position: fixed;
+  left: calc(50% - 980px);
+}
+
+/* At 1440px: 720 - 980 = -260px → partially off-screen AND overlapping content
+   At 1920px: 960 - 980 = -20px → barely works
+   At 1200px: 600 - 980 = -380px → mostly off-screen */
+```
+
+**Why it's bad:**
+- Only works at one specific viewport width
+- Breaks on every other screen size
+- Leads to cascading breakpoint fixes (fix one size, break another)
+- Creates a maintenance nightmare of custom breakpoints
+
+**Instead:**
+```css
+/* Good: Pin to edges, let z-index handle overlap */
+body { overflow-x: hidden; }
+
+.character-left {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  z-index: 0;
+  width: 400px;
+}
+
+.main-content {
+  position: relative;
+  z-index: 1;  /* Content renders on top */
+}
+```
+</anti_pattern>
+
+<anti_pattern name="breakpoint-micromanagement">
+**Problem:** Adding a custom breakpoint for every 100px of viewport width
+
+```css
+/* Bad: 8+ breakpoints for one element */
+.element {
+  width: 160px;
+}
+@media (min-width: 1440px) { .element { width: 230px; } }
+@media (min-width: 1600px) { .element { width: 300px; } }
+@media (min-width: 1728px) { .element { width: 360px; } }
+@media (min-width: 1920px) { .element { width: 400px; } }
+@media (min-width: 2200px) { .element { width: 480px; } }
+```
+
+**Why it's bad:**
+- Impossible to reason about which size applies at any given width
+- Each breakpoint is a potential bug
+- Iterating means touching 8 values instead of 1
+- Still breaks on viewports between the breakpoints
+
+**Instead:**
+```css
+/* Good: One size, maybe two, let overflow/z-index handle the rest */
+.element {
+  width: 400px;
+}
+
+@media (max-width: 1024px) {
+  .element { display: none; }  /* Below this, just hide it */
+}
+```
+</anti_pattern>
+<anti_pattern name="flex-item-overflow-sidebar-layout">
+**Problem:** Content overflows the sidebar layout because flex items have `min-width: auto` by default
+
+```tsx
+// Typical sidebar layout structure:
+// SidebarProvider (flex row, w-full)
+//   ├── Sidebar spacer (w-16rem)
+//   └── SidebarInset (flex-1 flex-col)  ← missing min-w-0!
+//         └── Page content
+//               └── Horizontal scroll area
+//                     └── flex row of shrink-0 items (e.g., kanban columns)
+
+// Bad: SidebarInset without min-w-0
+<main className="flex flex-1 flex-col max-w-full">
+  {children}  {/* Wide content pushes SidebarInset beyond viewport */}
+</main>
+```
+
+**Why it fails:**
+- In flexbox, items default to `min-width: auto` — they refuse to shrink below content's intrinsic width
+- `max-w-full` (max-width: 100%) resolves to the **parent's** width (full viewport), not the flex-allocated width
+- Adding `overflow-hidden` to child elements doesn't help because the flex item (parent) is already oversized
+- The entire content area (header, filters, etc.) gets pushed off-screen, not just the scrollable area
+- The filter/search buttons appear clipped at the right edge while columns extend beyond
+
+**Instead:**
+```tsx
+// Good: Add min-w-0 to the flex item that should shrink
+<main className="flex min-w-0 flex-1 flex-col max-w-full">
+  {children}
+</main>
+
+// Then in the page, use overflow-hidden on the container
+// and overflow-x-auto only on the scrollable area:
+<div className="flex flex-col overflow-hidden">
+  <header>...</header>                    {/* Stays within bounds */}
+  <div className="overflow-x-auto">      {/* Only this scrolls */}
+    <div className="flex gap-3">
+      {columns.map(col => (
+        <div className="w-[300px] shrink-0">{col}</div>
+      ))}
+    </div>
+  </div>
+</div>
+```
+
+**The fix chain:**
+1. `min-w-0` on the flex item (SidebarInset) → allows shrinking to flex-allocated width
+2. `overflow-hidden` on the page container → clips content to that width
+3. `overflow-x-auto` on the scroll area → horizontal scroll only where needed
+
+**Key lesson:** When content overflows a sidebar layout, the fix is almost always `min-w-0` on the content-side flex item. This is the standard flexbox fix — `overflow-hidden` on children won't help if the parent flex item itself is oversized.
+</anti_pattern>
 </css_anti_patterns>
 
 <performance_anti_patterns>
@@ -796,3 +965,62 @@ text-transform: uppercase;
 - Style enhances, never obscures
 </anti_pattern>
 </ui_style_anti_patterns>
+
+<refactoring_anti_patterns>
+<anti_pattern name="formatting-mixed-with-logic">
+**Problem:** Mixing Prettier/formatting changes with logic changes in the same commit
+
+```bash
+# Bad: One massive commit that mixes formatting + logic
+git commit -m "Major cleanup: formatting + dead code + security + config changes"
+# Reviewer sees thousands of quote/indent changes mixed with actual bug fixes
+```
+
+**Why it's bad:**
+- Impossible to review — logic changes buried under formatting noise
+- Git blame becomes useless (every line shows the mega-commit)
+- Rollbacks become dangerous (can't undo logic without undoing formatting)
+- A Prettier config change (e.g., printWidth or quote style) can touch 100+ files, drowning real fixes
+
+**Instead:**
+```bash
+# Good: Separate commits for separate concerns
+# Step 1: Update formatter config and apply in one commit
+npm run format
+git add .
+git commit -m "style: Apply Prettier formatting"
+
+# Step 2: NOW make logic changes (clean diff, easy to review)
+git commit -m "fix: Remove dead exports and centralize config"
+```
+
+**Rule:** ALWAYS run `npm run format` (or `prettier --write .`) as a **separate commit** before making any logic changes. Never manually reformat files that a tool can handle.
+</anti_pattern>
+
+<anti_pattern name="manual-formatting-edits">
+**Problem:** Manually editing files to fix formatting issues (quotes, indentation, semicolons)
+
+```tsx
+// Bad: Hand-editing dozens of files to change quote style or indentation
+// File 1: import { cn } from '@/lib/utils'  →  import { cn } from "@/lib/utils"
+// File 2: import { Button } from '@/ui'     →  import { Button } from "@/ui"
+// ... repeat for every file in the project
+```
+
+**Why it's bad:**
+- Burns time on mechanical changes that tools handle instantly
+- High risk of inconsistency (miss a file, miss a line)
+- Pollutes the git diff with noise
+
+**Instead:**
+```bash
+# One command replaces hundreds of manual edits
+npx prettier --write "src/**/*.{ts,tsx}"
+
+# Or if ESLint handles it:
+npx eslint --fix "src/**/*.{ts,tsx}"
+```
+
+**Rule:** If a change is purely mechanical (quotes, semicolons, indentation, trailing commas), use a tool — never edit by hand. Save manual edits for logic changes only.
+</anti_pattern>
+</refactoring_anti_patterns>

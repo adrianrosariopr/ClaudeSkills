@@ -622,6 +622,89 @@ async function matchGames(steamGames: SteamGame[]) {
 </anti_pattern>
 </external_data_anti_patterns>
 
+<connection_anti_patterns>
+**Connection & Deployment Anti-Patterns**
+
+<anti_pattern name="sslmode-in-connection-string">
+**Relying on `sslmode` in Connection Strings (Node.js `pg`)**
+
+```typescript
+// BAD: sslmode in URL overrides your ssl Pool option
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,  // Contains ?sslmode=require
+  ssl: { rejectUnauthorized: false },  // IGNORED by pg library!
+});
+// Result: SELF_SIGNED_CERT_IN_CHAIN with AWS RDS
+```
+
+**Problems:**
+- `pg` parses `sslmode=require` and enables SSL with cert validation ON
+- Your explicit `ssl: { rejectUnauthorized: false }` gets overridden
+- Works locally (no SSL), breaks in production (RDS requires SSL)
+- Error is misleading — looks like missing certs, actually a config conflict
+
+**Fix:** Strip sslmode from URL, control SSL through Pool options only
+```typescript
+const stripped = url.replace(/[?&]sslmode=[^&]*/g, '').replace(/\?$/, '');
+const isLocal = url.includes('localhost') || url.includes('127.0.0.1');
+const pool = new Pool({
+  connectionString: stripped,
+  ssl: isLocal ? undefined : { rejectUnauthorized: false },
+});
+```
+</anti_pattern>
+
+<anti_pattern name="multiple-pool-creation-paths">
+**Multiple Pool Creation Paths That Drift**
+
+```typescript
+// BAD: Two functions create pools with different config
+async function initPool() {
+  pool = new Pool({ connectionString, ssl: { rejectUnauthorized: false } }); // Fixed!
+}
+function getPool() {
+  pool = new Pool({ connectionString }); // Missing SSL! Never got the fix.
+}
+// Every CRUD function uses getPool() → all broken
+```
+
+**Problems:**
+- Fix applied to one path doesn't fix the other
+- The unused/deprecated path is often the one actually called everywhere
+- Silent failures — pool creates fine, queries fail later
+
+**Fix:** Single pool creation function, or shared config helper
+</anti_pattern>
+
+<anti_pattern name="health-check-needs-initialized-db">
+**Health Check Endpoint That Requires Initialized Database**
+
+```typescript
+// BAD: Health check queries tables that may not exist yet
+export async function GET() {
+  const teams = await getTeams();  // ERROR: relation "teams" does not exist
+  return NextResponse.json({ teams });
+}
+// Result: Health check fails → ECS kills task → new task → same failure → infinite loop
+```
+
+**Problems:**
+- Fresh database has no tables
+- ELB health check fails before anyone can trigger schema initialization
+- Deployment rolls back to old version forever
+- New infrastructure can never boot
+
+**Fix:** Initialize schema in health check endpoint
+```typescript
+export async function GET() {
+  await initializeDatabase();  // CREATE TABLE IF NOT EXISTS (idempotent)
+  const teams = await getTeams();
+  return NextResponse.json({ teams });
+}
+```
+</anti_pattern>
+</connection_anti_patterns>
+
 <summary>
 **Anti-Pattern Quick Reference**
 
@@ -639,4 +722,7 @@ async function matchGames(steamGames: SteamGame[]) {
 | **Runtime API calls** | Rate limits, bans, slow | Sync to YOUR DB |
 | **No mapping tables** | Can't link external IDs | Create mapping tables |
 | **No fallback cache** | Lose unmapped items | Cache for future matching |
+| **sslmode in conn string** | pg overrides ssl options | Strip sslmode, use Pool opts |
+| **Multiple pool creators** | Config drift, silent failures | Single creation path |
+| **Health check needs init'd DB** | Infinite deploy failure loop | Init schema in health check |
 </summary>

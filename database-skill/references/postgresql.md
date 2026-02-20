@@ -243,6 +243,50 @@ SELECT pg_try_advisory_lock(12345);
 </pattern>
 </common_patterns>
 
+<node_pg_ssl>
+**Node.js `pg` Library — SSL with AWS RDS**
+
+The `pg` (node-postgres) library has a critical gotcha with SSL that causes `SELF_SIGNED_CERT_IN_CHAIN` errors when connecting to AWS RDS.
+
+**The Problem:** `sslmode=require` in the connection string
+
+When you include `?sslmode=require` in DATABASE_URL, `pg` parses it internally and enables SSL with certificate validation ON (`rejectUnauthorized: true`). This **overrides** any explicit `ssl: { rejectUnauthorized: false }` you pass to the Pool constructor.
+
+```typescript
+// BAD: sslmode in URL conflicts with Pool ssl option
+const pool = new Pool({
+  connectionString: 'postgresql://user:pass@host.rds.amazonaws.com/db?sslmode=require',
+  ssl: { rejectUnauthorized: false },  // Gets overridden by sslmode!
+});
+// Result: SELF_SIGNED_CERT_IN_CHAIN error
+```
+
+**The Fix:** Strip `sslmode` from the URL and handle SSL entirely through Pool options.
+
+```typescript
+// GOOD: Strip sslmode, control SSL through options only
+function stripSSLMode(url: string): string {
+  return url.replace(/[?&]sslmode=[^&]*/g, '').replace(/\?$/, '');
+}
+
+function requiresSSL(url: string): boolean {
+  return !url.includes('localhost') && !url.includes('127.0.0.1');
+}
+
+const connectionString = process.env.DATABASE_URL!;
+const pool = new Pool({
+  connectionString: stripSSLMode(connectionString),
+  ssl: requiresSSL(connectionString) ? { rejectUnauthorized: false } : undefined,
+});
+```
+
+**Key Rules:**
+1. Never rely on `sslmode` in connection strings with node-postgres
+2. Always strip `sslmode` and control SSL via Pool constructor options
+3. Enable SSL for all non-localhost connections (covers RDS, any cloud DB)
+4. If you have multiple pool creation paths (sync/async), ALL must have SSL config
+</node_pg_ssl>
+
 <version_info>
 **Current Versions (2024-2025)**
 - PostgreSQL 17: Latest major release

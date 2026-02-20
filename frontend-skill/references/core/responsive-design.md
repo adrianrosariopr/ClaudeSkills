@@ -347,6 +347,79 @@ section {
 - BrowserStack, LambdaTest for cross-browser
 </testing>
 
+<decorative_elements>
+**Decorative images, characters, backgrounds that sit alongside content:**
+
+The simplest approach wins. Don't micromanage breakpoints for decorative elements:
+
+```css
+/* BAD: Fragile calc positioning that breaks at every screen size */
+.character {
+  position: fixed;
+  left: calc(50% - 980px);  /* Assumes ~1960px viewport */
+}
+
+/* BAD: 8 custom breakpoints trying to size decorative elements */
+.character {
+  width: 160px;           /* tiny at base */
+  @media (min-width: 1440px) { width: 230px; }
+  @media (min-width: 1600px) { width: 300px; }
+  @media (min-width: 1728px) { width: 360px; }
+  /* ...and so on forever */
+}
+
+/* BAD: Hardcoded min-height that pushes content below the fold */
+.content-area {
+  min-height: 520px;  /* Eats all vertical space on laptops */
+}
+```
+
+```css
+/* GOOD: Pin to edges, use z-index layering, clip overflow */
+body {
+  overflow-x: hidden;  /* Clip decorative elements at viewport edge */
+}
+
+.character {
+  position: fixed;
+  bottom: 0;
+  z-index: 0;          /* Behind content */
+  width: 400px;        /* One reasonable size */
+}
+
+.character-left { left: 0; }
+.character-right { right: 0; }
+
+.main-content {
+  position: relative;
+  z-index: 1;          /* Renders on top of decorative elements */
+}
+
+/* GOOD: Let content dictate height, not hardcoded min-height */
+.content-area {
+  padding: 1.5rem;  /* Padding provides breathing room */
+  /* No min-height - content + padding = natural height */
+}
+```
+
+**The z-index layering pattern:**
+- Decorative elements: `z-index: 0` (behind everything)
+- Main content: `z-index: 1` (renders on top)
+- `overflow-x: hidden` on body clips excess at viewport edges
+- Decorative elements naturally tuck behind the content box
+- On wide screens: fully visible on the sides
+- On narrow screens: partially clipped, partially behind the box
+- NO breakpoint calculations needed
+
+**Rules:**
+1. Pin decorative elements to viewport edges (`left: 0` / `right: 0`)
+2. Use z-index to layer content on top - don't try to avoid all overlap
+3. Add `overflow-x: hidden` to body to prevent horizontal scrollbar
+4. Never use `min-height` for aesthetic spacing - use padding instead
+5. Let content drive height; buttons/CTAs should never be pushed below the fold
+6. One or two breakpoints max for decorative elements (show/hide + one size bump)
+</decorative_elements>
+
 <responsive_checklist>
 ```markdown
 Layout
@@ -354,6 +427,8 @@ Layout
 - [ ] No horizontal scroll
 - [ ] Touch targets 44px+ minimum
 - [ ] Adequate spacing between interactive elements
+- [ ] All interactive elements (buttons, CTAs) visible without scrolling on common viewports
+- [ ] No hardcoded min-height pushing content below the fold
 
 Typography
 - [ ] Text readable without zooming
@@ -364,6 +439,12 @@ Images
 - [ ] Images scale proportionally
 - [ ] srcset/sizes for resolution switching
 - [ ] Art direction for different contexts
+
+Decorative Elements
+- [ ] Decorative elements use z-index layering (not breakpoint micromanagement)
+- [ ] overflow-x: hidden prevents horizontal scrollbar from decorative overflow
+- [ ] Decorative elements hidden on screens too small to show them meaningfully
+- [ ] No calc()-based positioning that assumes a specific viewport width
 
 Navigation
 - [ ] Accessible on mobile (hamburger, bottom nav)
