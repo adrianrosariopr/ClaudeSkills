@@ -42,7 +42,7 @@ Use tables to walk through user flows. Step 1, Step 2, Step 3. This is easy to s
 
 All specs are published directly to Notion via the API. The main spec becomes a page under the user-specified parent page, and ENV.md becomes a child page of the spec page.
 
-Notion API Token: Read from `NOTION_API_TOKEN` env var or `~/.claude/.notion-token` file
+Notion API Token: Read from `~/.claude/.env` file (look for `NOTION_API_TOKEN=`)
 Default parent page (SciPlay): `d841d8f6-efb9-412a-b025-8db02c06ccc8`
 Workspace: Invisionnaire LLC
 </principle>

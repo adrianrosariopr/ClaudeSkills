@@ -14,7 +14,7 @@
 **Notion API settings (from SKILL.md):**
 | Setting | Value |
 |---------|-------|
-| API Token | Read from `NOTION_API_TOKEN` env var or `~/.claude/.notion-token` file |
+| API Token | Read from `~/.claude/.env` file (look for `NOTION_API_TOKEN=`) |
 | API Version | `2022-06-28` |
 | Default Parent Page | SciPlay (`d841d8f6-efb9-412a-b025-8db02c06ccc8`) |
 
